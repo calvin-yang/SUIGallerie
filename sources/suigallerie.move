@@ -77,7 +77,7 @@ module suigallerie::suigallerie {
         transfer::share_object(deploy_record);
     }
 
-    public fun deploy_space_non_entry<T>(deploy_record: &mut DeployRecord, ctx: &mut TxContext): SpaceOwner {
+    public fun deploy_space_non_entry<T>(deploy_record: &mut DeployRecord, ctx: &mut TxContext): (Space<T>, SpaceOwner) {
         assert!(deploy_record.version == VERSION, EVersionMismatch);
         let space = Space<T> {
             id: object::new(ctx),
@@ -91,16 +91,17 @@ module suigallerie::suigallerie {
             to: space_id,
         };
         table_vec::push_back<ID>(&mut deploy_record.spaces, space_id);
-        transfer::share_object(space);
         emit(DeployEvent {
             deployer: ctx.sender(),
             space: space_id,
         });
-        space_owner
+        (space, space_owner)
     }
 
+    #[allow(lint(share_owned))]
     public entry fun deploy_space<T>(deploy_record: &mut DeployRecord, ctx: &mut TxContext) {
-        let space_owner = deploy_space_non_entry<T>(deploy_record, ctx);
+        let (space, space_owner) = deploy_space_non_entry<T>(deploy_record, ctx);
+        transfer::share_object(space);
         transfer::public_transfer(space_owner, ctx.sender());
     }
 
