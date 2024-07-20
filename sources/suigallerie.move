@@ -77,7 +77,10 @@ module suigallerie::suigallerie {
         transfer::share_object(deploy_record);
     }
 
-    public fun deploy_space_non_entry<T>(deploy_record: &mut DeployRecord, ctx: &mut TxContext): (Space<T>, SpaceOwner) {
+    public fun deploy_space_non_entry<T>(
+        deploy_record: &mut DeployRecord, 
+        ctx: &mut TxContext
+    ): (Space<T>, SpaceOwner) {
         assert!(deploy_record.version == VERSION, EVersionMismatch);
         let space = Space<T> {
             id: object::new(ctx),
