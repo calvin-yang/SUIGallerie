@@ -1,35 +1,34 @@
 module suigallerie::suigallerie {
     use std::type_name;
-    use sui::table::{Self, Table};
     use sui::table_vec::{Self, TableVec};
     use sui::balance::{Self, Balance};
     use sui::coin::{Self, Coin};
+    use sui::sui::SUI;
     use sui::event::emit;
 
     // ======== Constants =========
     const VERSION: u64 = 1;
+    const PER_GAS: u64 = 100_000;
 
     // ======== Types =========
     public struct DeployRecord has key {
         id: UID,
         version: u64,
-        campaigns: TableVec<ID>,
+        spaces: TableVec<ID>,
     }
 
     public struct AdminCap has key, store {
         id: UID,
     }
 
-    public struct Campaign<phantom T> has key {
+    public struct Space<phantom T> has key {
         id: UID,
         version: u64,
         balance: Balance<T>,
-        calculate: Table<address, u64>,
-        participants: TableVec<address>,
-        remain: u64,
+        gas: Balance<SUI>,
     }
 
-    public struct CampaignOwner has key, store {
+    public struct SpaceOwner has key, store {
         id: UID,
         to: ID,
     }
@@ -37,18 +36,24 @@ module suigallerie::suigallerie {
     // ======== Events =========
     public struct DeployEvent has copy, drop {
         deployer: address,
-        campaign: ID,
+        space: ID,
     }
 
     public struct AddFund has copy, drop {
-        campaign: ID,
+        space: ID,
         value: u64,
         coinType: std::ascii::String,
         sender: address,
     }
 
+    public struct AddGas has copy, drop {
+        space: ID,
+        value: u64,
+        sender: address,
+    }
+
     public struct AirDrop has copy, drop {
-        campaign: ID,
+        space: ID,
         sender: address,
     }
 
@@ -67,133 +72,100 @@ module suigallerie::suigallerie {
         let deploy_record = DeployRecord { 
             id: object::new(ctx),
             version: VERSION,
-            campaigns: table_vec::empty<ID>(ctx),  
+            spaces: table_vec::empty<ID>(ctx),  
         };
         transfer::share_object(deploy_record);
     }
 
-    public fun deploy_campaign_non_entry<T>(deploy_record: &mut DeployRecord, ctx: &mut TxContext): CampaignOwner {
+    public fun deploy_space_non_entry<T>(deploy_record: &mut DeployRecord, ctx: &mut TxContext): SpaceOwner {
         assert!(deploy_record.version == VERSION, EVersionMismatch);
-        let campaign = Campaign<T> {
+        let space = Space<T> {
             id: object::new(ctx),
             version: VERSION,
             balance: balance::zero<T>(),
-            calculate: table::new<address, u64>(ctx),
-            participants: table_vec::empty<address>(ctx),
-            remain: 0,
+            gas: balance::zero<SUI>(),
         };
-        let campaign_id = object::id(&campaign);
-        let campaign_owner = CampaignOwner {
+        let space_id = object::id(&space);
+        let space_owner = SpaceOwner {
             id: object::new(ctx),
-            to: campaign_id,
+            to: space_id,
         };
-        table_vec::push_back<ID>(&mut deploy_record.campaigns, campaign_id);
-        transfer::share_object(campaign);
+        table_vec::push_back<ID>(&mut deploy_record.spaces, space_id);
+        transfer::share_object(space);
         emit(DeployEvent {
             deployer: ctx.sender(),
-            campaign: campaign_id,
+            space: space_id,
         });
-        campaign_owner
+        space_owner
     }
 
-    public entry fun deploy_campaign<T>(deploy_record: &mut DeployRecord, ctx: &mut TxContext) {
-        let campaign_owner = deploy_campaign_non_entry<T>(deploy_record, ctx);
-        transfer::public_transfer(campaign_owner, ctx.sender());
+    public entry fun deploy_space<T>(deploy_record: &mut DeployRecord, ctx: &mut TxContext) {
+        let space_owner = deploy_space_non_entry<T>(deploy_record, ctx);
+        transfer::public_transfer(space_owner, ctx.sender());
     }
 
-    public fun add_fund_non_entry<T>(campaign_owner: &CampaignOwner, campaign: &mut Campaign<T>, fund: Coin<T>, ctx: &mut TxContext) {
-        assert!(campaign_owner.to == object::id(campaign), EOwnership);
-        assert!(campaign.version == VERSION, EVersionMismatch);
+    public fun add_fund_non_entry<T>(space_owner: &SpaceOwner, space: &mut Space<T>, fund: Coin<T>, ctx: &mut TxContext) {
+        assert!(space_owner.to == object::id(space), EOwnership);
+        assert!(space.version == VERSION, EVersionMismatch);
         let value = coin::value<T>(&fund);
-        balance::join<T>(&mut campaign.balance, coin::into_balance<T>(fund));
-        campaign.remain = campaign.remain + value;
+        balance::join<T>(&mut space.balance, coin::into_balance<T>(fund));
         emit(AddFund {
-            campaign: object::id(campaign),
+            space: object::id(space),
             value: value,
             coinType: type_name::into_string(type_name::get_with_original_ids<T>()),
             sender: ctx.sender(),
         });
     }
 
-    public entry fun add_fund<T>(campaign_owner: &CampaignOwner, campaign: &mut Campaign<T>, fund: Coin<T>, ctx: &mut TxContext) {
-        add_fund_non_entry<T>(campaign_owner, campaign, fund, ctx);
+    public entry fun add_fund<T>(space_owner: &SpaceOwner, space: &mut Space<T>, fund: Coin<T>, ctx: &mut TxContext) {
+        add_fund_non_entry<T>(space_owner, space, fund, ctx);
     }
 
-    public fun one_add_user<T>(campaign_owner: &CampaignOwner, campaign: &mut Campaign<T>, user: address, value: u64) {
-        assert!(campaign_owner.to == object::id(campaign), EOwnership);
-        assert!(campaign.version == VERSION, EVersionMismatch);
-
-        add_user(campaign, user, value);
-    }
-
-    public fun batch_add_user<T>(campaign_owner: &CampaignOwner, campaign: &mut Campaign<T>, mut users: vector<address>, value: u64) {
-        assert!(campaign_owner.to == object::id(campaign), EOwnership);
-        assert!(campaign.version == VERSION, EVersionMismatch);
-
-        while(vector::length(&users) > 0 && campaign.remain > 0) {
-            let user = vector::pop_back<address>(&mut users);
-            add_user(campaign, user, value);
-        };
-    }
-
-    public fun vector_add_user<T>(campaign_owner: &CampaignOwner, campaign: &mut Campaign<T>, mut users: vector<address>, mut values: vector<u64>) {
-        assert!(campaign_owner.to == object::id(campaign), EOwnership);
-        assert!(campaign.version == VERSION, EVersionMismatch);
-        assert!(vector::length(&users) == vector::length(&values), ENotSameLength);
-
-        while(vector::length(&users) > 0 && campaign.remain > 0) {
-            let user = vector::pop_back<address>(&mut users);
-            let value = vector::pop_back<u64>(&mut values);
-            add_user(campaign, user, value);
-        };
-    } 
-
-    fun add_user<T>(campaign: &mut Campaign<T>, user: address, mut value: u64) {
-        if (table::contains<address, u64>(&campaign.calculate, user)) {
-            let value_former = table::borrow_mut<address, u64>(&mut campaign.calculate, user);
-            campaign.remain = campaign.remain + *value_former;
-            if (campaign.remain < value) {
-                value = campaign.remain;
-            };
-            campaign.remain = campaign.remain - value;
-            *value_former = value;
-        } else {
-            if (campaign.remain < value) {
-                value = campaign.remain;
-            };
-            campaign.remain = campaign.remain - value;
-            table_vec::push_back<address>(&mut campaign.participants, user);
-            table::add<address, u64>(&mut campaign.calculate, user, value);
-        }
-    }
-
-    public fun burn_ownership(campaign_owner: CampaignOwner) {
-        let CampaignOwner {
-            id,
-            to: _,
-        } = campaign_owner;
-        object::delete(id);
-    }
-
-    public fun withdraw_all_to<T>(_: &AdminCap, campaign: &mut Campaign<T>, recipient: address, ctx: &mut TxContext) {
-        let total_value = balance::value<T>(&campaign.balance);
-        let return_coin = coin::take<T>(&mut campaign.balance, total_value, ctx);
-        transfer::public_transfer(return_coin, recipient);
-    }
-
-    public fun airdrop<T>(_: &AdminCap, campaign: &mut Campaign<T>, mut times: u64, ctx: &mut TxContext) {
-        while (times > 0 && table_vec::length(&campaign.participants) > 0) {
-            let recipient = table_vec::pop_back<address>(&mut campaign.participants);
-            let value = table::remove<address, u64>(&mut campaign.calculate, recipient);
-            let return_coin = coin::take<T>(&mut campaign.balance, value, ctx);
-            transfer::public_transfer(return_coin, recipient);
-            times = times - 1;
-        };
-        emit(AirDrop {
-            campaign: object::id(campaign),
+    public entry fun add_gas<T>(space_owner: &SpaceOwner, space: &mut Space<T>, gas: Coin<SUI>, ctx: &mut TxContext) {
+        assert!(space_owner.to == object::id(space), EOwnership);
+        assert!(space.version == VERSION, EVersionMismatch);
+        let value = coin::value<SUI>(&gas);
+        balance::join<SUI>(&mut space.gas, coin::into_balance<SUI>(gas));
+        emit(AddGas {
+            space: object::id(space),
+            value: value,
             sender: ctx.sender(),
         });
     }
 
+    public fun burn_ownership(space_owner: SpaceOwner) {
+        let SpaceOwner {
+            id,
+            to: _,
+        } = space_owner;
+        object::delete(id);
+    }
 
+    public fun withdraw_all_to<T>(_: &AdminCap, space: &mut Space<T>, recipient: address, ctx: &mut TxContext) {
+        let total_value = balance::value<T>(&space.balance);
+        let return_coin = coin::take<T>(&mut space.balance, total_value, ctx);
+        transfer::public_transfer(return_coin, recipient);
+    }
+
+    #[allow(lint(self_transfer))]
+    public fun airdrop<T>(_: &AdminCap, space: &mut Space<T>, mut users: vector<address>, mut values: vector<u64>, ctx: &mut TxContext) {
+        assert!(vector::length(&users) == vector::length(&values), ENotSameLength);
+        let mut count: u64 = vector::length(&users);
+        let gas_budget: u64 = count * PER_GAS;
+        let take_gas = coin::take<SUI>(&mut space.gas, gas_budget, ctx);
+        transfer::public_transfer(take_gas, ctx.sender());
+
+        while (count > 0) {
+            let recipient = vector::pop_back<address>(&mut users);
+            let value = vector::pop_back<u64>(&mut values);
+            let airdrop_coin = coin::take<T>(&mut space.balance, value, ctx);
+            transfer::public_transfer(airdrop_coin, recipient);
+            count = count - 1;
+        };
+
+        emit(AirDrop {
+            space: object::id(space),
+            sender: ctx.sender(),
+        });
+    }
 }
