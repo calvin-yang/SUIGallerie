@@ -8,13 +8,14 @@ module suigallerie::suigallerie {
 
     // ======== Constants =========
     const VERSION: u64 = 1;
-    const PER_GAS: u64 = 100_000;
+    const PER_GAS: u64 = 3_000_000;
 
     // ======== Types =========
     public struct DeployRecord has key {
         id: UID,
         version: u64,
         spaces: TableVec<ID>,
+        per_gas: u64,
     }
 
     public struct AdminCap has key, store {
@@ -26,11 +27,6 @@ module suigallerie::suigallerie {
         version: u64,
         balance: Balance<T>,
         gas: Balance<SUI>,
-    }
-
-    public struct SpaceOwner has key, store {
-        id: UID,
-        to: ID,
     }
 
     // ======== Events =========
@@ -58,9 +54,8 @@ module suigallerie::suigallerie {
     }
 
     // ======== Errors =========
-    const EOwnership: u64 = 0;
-    const EVersionMismatch: u64 = 1;
-    const ENotSameLength: u64 = 2;
+    const EVersionMismatch: u64 = 0;
+    const ENotSameLength: u64 = 1;
 
     // ======== Functions =========
     fun init(ctx: &mut TxContext) {
@@ -72,7 +67,8 @@ module suigallerie::suigallerie {
         let deploy_record = DeployRecord { 
             id: object::new(ctx),
             version: VERSION,
-            spaces: table_vec::empty<ID>(ctx),  
+            spaces: table_vec::empty<ID>(ctx), 
+            per_gas: PER_GAS, 
         };
         transfer::share_object(deploy_record);
     }
@@ -80,7 +76,7 @@ module suigallerie::suigallerie {
     public fun deploy_space_non_entry<T>(
         deploy_record: &mut DeployRecord, 
         ctx: &mut TxContext
-    ): (Space<T>, SpaceOwner) {
+    ): Space<T> {
         assert!(deploy_record.version == VERSION, EVersionMismatch);
         let space = Space<T> {
             id: object::new(ctx),
@@ -89,27 +85,21 @@ module suigallerie::suigallerie {
             gas: balance::zero<SUI>(),
         };
         let space_id = object::id(&space);
-        let space_owner = SpaceOwner {
-            id: object::new(ctx),
-            to: space_id,
-        };
         table_vec::push_back<ID>(&mut deploy_record.spaces, space_id);
         emit(DeployEvent {
             deployer: ctx.sender(),
             space: space_id,
         });
-        (space, space_owner)
+        space
     }
 
     #[allow(lint(share_owned))]
     public entry fun deploy_space<T>(deploy_record: &mut DeployRecord, ctx: &mut TxContext) {
-        let (space, space_owner) = deploy_space_non_entry<T>(deploy_record, ctx);
+        let space = deploy_space_non_entry<T>(deploy_record, ctx);
         transfer::share_object(space);
-        transfer::public_transfer(space_owner, ctx.sender());
     }
 
-    public fun add_fund_non_entry<T>(space_owner: &SpaceOwner, space: &mut Space<T>, fund: Coin<T>, ctx: &mut TxContext) {
-        assert!(space_owner.to == object::id(space), EOwnership);
+    public fun add_fund_non_entry<T>(space: &mut Space<T>, fund: Coin<T>, ctx: &mut TxContext) {
         assert!(space.version == VERSION, EVersionMismatch);
         let value = coin::value<T>(&fund);
         balance::join<T>(&mut space.balance, coin::into_balance<T>(fund));
@@ -121,12 +111,11 @@ module suigallerie::suigallerie {
         });
     }
 
-    public entry fun add_fund<T>(space_owner: &SpaceOwner, space: &mut Space<T>, fund: Coin<T>, ctx: &mut TxContext) {
-        add_fund_non_entry<T>(space_owner, space, fund, ctx);
+    public entry fun add_fund<T>(space: &mut Space<T>, fund: Coin<T>, ctx: &mut TxContext) {
+        add_fund_non_entry<T>(space, fund, ctx);
     }
 
-    public entry fun add_gas<T>(space_owner: &SpaceOwner, space: &mut Space<T>, gas: Coin<SUI>, ctx: &mut TxContext) {
-        assert!(space_owner.to == object::id(space), EOwnership);
+    public entry fun add_gas<T>(space: &mut Space<T>, gas: Coin<SUI>, ctx: &mut TxContext) {
         assert!(space.version == VERSION, EVersionMismatch);
         let value = coin::value<SUI>(&gas);
         balance::join<SUI>(&mut space.gas, coin::into_balance<SUI>(gas));
@@ -137,31 +126,21 @@ module suigallerie::suigallerie {
         });
     }
 
-    public fun burn_ownership(space_owner: SpaceOwner) {
-        let SpaceOwner {
-            id,
-            to: _,
-        } = space_owner;
-        object::delete(id);
-    }
-
-    public fun withdraw_all_coin_to<T>(_: &AdminCap, space: &mut Space<T>, recipient: address, ctx: &mut TxContext) {
-        let total_value = balance::value<T>(&space.balance);
-        let return_coin = coin::take<T>(&mut space.balance, total_value, ctx);
+    public fun withdraw_coin_to<T>(_: &AdminCap, space: &mut Space<T>, value: u64, recipient: address, ctx: &mut TxContext) {
+        let return_coin = coin::take<T>(&mut space.balance, value, ctx);
         transfer::public_transfer(return_coin, recipient);
     }
 
-    public fun withdraw_all_gas_to<T>(_: &AdminCap, space: &mut Space<T>, recipient: address, ctx: &mut TxContext) {
-        let total_value = balance::value<SUI>(&space.gas);
-        let return_coin = coin::take<SUI>(&mut space.gas, total_value, ctx);
+    public fun withdraw_gas_to<T>(_: &AdminCap, space: &mut Space<T>, value: u64, recipient: address, ctx: &mut TxContext) {
+        let return_coin = coin::take<SUI>(&mut space.gas, value, ctx);
         transfer::public_transfer(return_coin, recipient);
     }
 
     #[allow(lint(self_transfer))]
-    public fun airdrop<T>(_: &AdminCap, space: &mut Space<T>, mut users: vector<address>, mut values: vector<u64>, ctx: &mut TxContext) {
+    public fun airdrop<T>(_: &AdminCap, deploy_record: &DeployRecord, space: &mut Space<T>, mut users: vector<address>, mut values: vector<u64>, ctx: &mut TxContext) {
         assert!(vector::length(&users) == vector::length(&values), ENotSameLength);
         let mut count: u64 = vector::length(&users);
-        let gas_budget: u64 = count * PER_GAS;
+        let gas_budget: u64 = count * deploy_record.per_gas;
         let take_gas = coin::take<SUI>(&mut space.gas, gas_budget, ctx);
         transfer::public_transfer(take_gas, ctx.sender());
 
@@ -177,6 +156,10 @@ module suigallerie::suigallerie {
             space: object::id(space),
             sender: ctx.sender(),
         });
+    }
+
+    public fun set_per_gas(_: &AdminCap, deploy_record: &mut DeployRecord, per_gas: u64) {
+        deploy_record.per_gas = per_gas;
     }
 
     // ======== Read Functions =========
