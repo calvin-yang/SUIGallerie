@@ -1,10 +1,12 @@
 module suigallerie::suigallerie {
     use std::type_name;
     use sui::table_vec::{Self, TableVec};
+    use sui::table::{Self, Table};
     use sui::balance::{Self, Balance};
     use sui::coin::{Self, Coin};
     use sui::sui::SUI;
     use sui::event::emit;
+    use std::ascii::String;
 
     // ======== Constants =========
     const VERSION: u64 = 1;
@@ -15,6 +17,7 @@ module suigallerie::suigallerie {
         id: UID,
         version: u64,
         spaces: TableVec<ID>,
+        web2_to_space: Table<String, ID>,
         per_gas: u64,
     }
 
@@ -68,6 +71,7 @@ module suigallerie::suigallerie {
             id: object::new(ctx),
             version: VERSION,
             spaces: table_vec::empty<ID>(ctx), 
+            web2_to_space: table::new<String, ID>(ctx),
             per_gas: PER_GAS, 
         };
         transfer::share_object(deploy_record);
@@ -75,6 +79,7 @@ module suigallerie::suigallerie {
 
     public fun deploy_space_non_entry<T>(
         deploy_record: &mut DeployRecord, 
+        web2_space_id: String,
         ctx: &mut TxContext
     ): Space<T> {
         assert!(deploy_record.version == VERSION, EVersionMismatch);
@@ -86,6 +91,7 @@ module suigallerie::suigallerie {
         };
         let space_id = object::id(&space);
         table_vec::push_back<ID>(&mut deploy_record.spaces, space_id);
+        table::add<String, ID>(&mut deploy_record.web2_to_space, web2_space_id, space_id);
         emit(DeployEvent {
             deployer: ctx.sender(),
             space: space_id,
@@ -94,8 +100,8 @@ module suigallerie::suigallerie {
     }
 
     #[allow(lint(share_owned))]
-    public entry fun deploy_space<T>(deploy_record: &mut DeployRecord, ctx: &mut TxContext) {
-        let space = deploy_space_non_entry<T>(deploy_record, ctx);
+    public entry fun deploy_space<T>(deploy_record: &mut DeployRecord, web2_space_id: String, ctx: &mut TxContext) {
+        let space = deploy_space_non_entry<T>(deploy_record, web2_space_id, ctx);
         transfer::share_object(space);
     }
 
