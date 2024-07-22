@@ -32,19 +32,18 @@ module suigallerie::suigallerie_tests {
         test_scenario::next_tx(scenario, alice);
         {
             let mut space = test_scenario::take_shared<suigallerie::Space<TEST>>(scenario);
-            let space_owner = test_scenario::take_from_sender<suigallerie::SpaceOwner>(scenario);
             let test_coin = coin::mint_for_testing<TEST>(200_000_000_000, test_scenario::ctx(scenario));
-            suigallerie::add_fund<TEST>(&space_owner, &mut space, test_coin, test_scenario::ctx(scenario));
+            suigallerie::add_fund<TEST>(&mut space, test_coin, test_scenario::ctx(scenario));
             let gas_coin = coin::mint_for_testing<SUI>(100_000_000_000, test_scenario::ctx(scenario));
-            suigallerie::add_gas<TEST>(&space_owner, &mut space, gas_coin, test_scenario::ctx(scenario));
+            suigallerie::add_gas<TEST>(&mut space, gas_coin, test_scenario::ctx(scenario));
             assert!(suigallerie::balance_value<TEST>(&space) == 200_000_000_000, 1);
             assert!(suigallerie::gas_value<TEST>(&space) == 100_000_000_000, 2);
-            test_scenario::return_to_sender(scenario, space_owner);
             test_scenario::return_shared(space);
         };
 
         test_scenario::next_tx(scenario, sender);
         {
+            let deploy_record = test_scenario::take_shared<suigallerie::DeployRecord>(scenario);
             let mut space = test_scenario::take_shared<suigallerie::Space<TEST>>(scenario);
             let admin_cap = test_scenario::take_from_sender<suigallerie::AdminCap>(scenario);
             let mut times = 5;
@@ -55,21 +54,21 @@ module suigallerie::suigallerie_tests {
                 vector::push_back(&mut values, 1_000_000_000);
                 times = times - 1;
             };
-            suigallerie::airdrop<TEST>(&admin_cap, &mut space, users, values, test_scenario::ctx(scenario));
+            suigallerie::airdrop<TEST>(&admin_cap, &deploy_record, &mut space, users, values, test_scenario::ctx(scenario));
             assert!(suigallerie::balance_value<TEST>(&space) == 195_000_000_000, 3);
-            assert!(suigallerie::gas_value<TEST>(&space) == 99_999_500_000, 4);
+            assert!(suigallerie::gas_value<TEST>(&space) == 99_985_000_000, 4);
             test_scenario::return_to_sender(scenario, admin_cap);
             test_scenario::return_shared(space);
+            test_scenario::return_shared(deploy_record);
         };
 
         test_scenario::next_tx(scenario, sender);
         {
             let mut space = test_scenario::take_shared<suigallerie::Space<TEST>>(scenario);
             let admin_cap = test_scenario::take_from_sender<suigallerie::AdminCap>(scenario);
-            suigallerie::withdraw_all_coin_to<TEST>(&admin_cap, &mut space, alice, test_scenario::ctx(scenario));
+            suigallerie::withdraw_coin_to<TEST>(&admin_cap, &mut space, alice, 195_000_000_000, test_scenario::ctx(scenario));
             assert!(suigallerie::balance_value<TEST>(&space) == 0, 5);
-            assert!(suigallerie::gas_value<TEST>(&space) == 99_999_500_000, 4);
-            suigallerie::withdraw_all_gas_to<TEST>(&admin_cap, &mut space, alice, test_scenario::ctx(scenario));
+            suigallerie::withdraw_gas_to<TEST>(&admin_cap, &mut space, alice, 99_985_000_000, test_scenario::ctx(scenario));
             assert!(suigallerie::gas_value<TEST>(&space) == 0, 6);
             test_scenario::return_to_sender(scenario, admin_cap);
             test_scenario::return_shared(space);
@@ -102,22 +101,21 @@ module suigallerie::suigallerie_tests {
         test_scenario::next_tx(scenario, alice);
         {
             let mut space = test_scenario::take_shared<suigallerie::Space<TEST>>(scenario);
-            let space_owner = test_scenario::take_from_sender<suigallerie::SpaceOwner>(scenario);
             let test_coin = coin::mint_for_testing<TEST>(200_000_000_000, test_scenario::ctx(scenario));
-            suigallerie::add_fund<TEST>(&space_owner, &mut space, test_coin, test_scenario::ctx(scenario));
-            let gas_coin = coin::mint_for_testing<SUI>(500_000, test_scenario::ctx(scenario));
-            suigallerie::add_gas<TEST>(&space_owner, &mut space, gas_coin, test_scenario::ctx(scenario));
+            suigallerie::add_fund<TEST>(&mut space, test_coin, test_scenario::ctx(scenario));
+            let gas_coin = coin::mint_for_testing<SUI>(50_000, test_scenario::ctx(scenario));
+            suigallerie::add_gas<TEST>(&mut space, gas_coin, test_scenario::ctx(scenario));
             assert!(suigallerie::balance_value<TEST>(&space) == 200_000_000_000, 1);
-            assert!(suigallerie::gas_value<TEST>(&space) == 500_000, 2);
-            test_scenario::return_to_sender(scenario, space_owner);
+            assert!(suigallerie::gas_value<TEST>(&space) == 50_000, 2);
             test_scenario::return_shared(space);
         };
 
         test_scenario::next_tx(scenario, sender);
         {
+            let deploy_record = test_scenario::take_shared<suigallerie::DeployRecord>(scenario);
             let mut space = test_scenario::take_shared<suigallerie::Space<TEST>>(scenario);
             let admin_cap = test_scenario::take_from_sender<suigallerie::AdminCap>(scenario);
-            let mut times = 500;
+            let mut times = 5;
             let mut users: vector<address> = vector::empty();
             let mut values: vector<u64> = vector::empty();
             while (times > 0) {
@@ -125,9 +123,22 @@ module suigallerie::suigallerie_tests {
                 vector::push_back(&mut values, 1_000_000_000);
                 times = times - 1;
             };
-            suigallerie::airdrop<TEST>(&admin_cap, &mut space, users, values, test_scenario::ctx(scenario));
+            suigallerie::airdrop<TEST>(&admin_cap, &deploy_record, &mut space, users, values, test_scenario::ctx(scenario));
             assert!(suigallerie::balance_value<TEST>(&space) == 195_000_000_000, 3);
-            assert!(suigallerie::gas_value<TEST>(&space) == 99_999_500_000, 4);
+            assert!(suigallerie::gas_value<TEST>(&space) == 99_985_000_000, 4);
+            test_scenario::return_to_sender(scenario, admin_cap);
+            test_scenario::return_shared(space);
+            test_scenario::return_shared(deploy_record);
+        };
+
+        test_scenario::next_tx(scenario, sender);
+        {
+            let mut space = test_scenario::take_shared<suigallerie::Space<TEST>>(scenario);
+            let admin_cap = test_scenario::take_from_sender<suigallerie::AdminCap>(scenario);
+            suigallerie::withdraw_coin_to<TEST>(&admin_cap, &mut space, alice, 195_000_000_000, test_scenario::ctx(scenario));
+            assert!(suigallerie::balance_value<TEST>(&space) == 0, 5);
+            suigallerie::withdraw_gas_to<TEST>(&admin_cap, &mut space, alice, 99_985_000_000, test_scenario::ctx(scenario));
+            assert!(suigallerie::gas_value<TEST>(&space) == 0, 6);
             test_scenario::return_to_sender(scenario, admin_cap);
             test_scenario::return_shared(space);
         };
@@ -159,22 +170,21 @@ module suigallerie::suigallerie_tests {
         test_scenario::next_tx(scenario, alice);
         {
             let mut space = test_scenario::take_shared<suigallerie::Space<TEST>>(scenario);
-            let space_owner = test_scenario::take_from_sender<suigallerie::SpaceOwner>(scenario);
-            let test_coin = coin::mint_for_testing<TEST>(20_000, test_scenario::ctx(scenario));
-            suigallerie::add_fund<TEST>(&space_owner, &mut space, test_coin, test_scenario::ctx(scenario));
+            let test_coin = coin::mint_for_testing<TEST>(200, test_scenario::ctx(scenario));
+            suigallerie::add_fund<TEST>(&mut space, test_coin, test_scenario::ctx(scenario));
             let gas_coin = coin::mint_for_testing<SUI>(100_000_000_000, test_scenario::ctx(scenario));
-            suigallerie::add_gas<TEST>(&space_owner, &mut space, gas_coin, test_scenario::ctx(scenario));
-            assert!(suigallerie::balance_value<TEST>(&space) == 20_000, 1);
+            suigallerie::add_gas<TEST>(&mut space, gas_coin, test_scenario::ctx(scenario));
+            assert!(suigallerie::balance_value<TEST>(&space) == 200, 1);
             assert!(suigallerie::gas_value<TEST>(&space) == 100_000_000_000, 2);
-            test_scenario::return_to_sender(scenario, space_owner);
             test_scenario::return_shared(space);
         };
 
         test_scenario::next_tx(scenario, sender);
         {
+            let deploy_record = test_scenario::take_shared<suigallerie::DeployRecord>(scenario);
             let mut space = test_scenario::take_shared<suigallerie::Space<TEST>>(scenario);
             let admin_cap = test_scenario::take_from_sender<suigallerie::AdminCap>(scenario);
-            let mut times = 500;
+            let mut times = 5;
             let mut users: vector<address> = vector::empty();
             let mut values: vector<u64> = vector::empty();
             while (times > 0) {
@@ -182,9 +192,22 @@ module suigallerie::suigallerie_tests {
                 vector::push_back(&mut values, 1_000_000_000);
                 times = times - 1;
             };
-            suigallerie::airdrop<TEST>(&admin_cap, &mut space, users, values, test_scenario::ctx(scenario));
+            suigallerie::airdrop<TEST>(&admin_cap, &deploy_record, &mut space, users, values, test_scenario::ctx(scenario));
             assert!(suigallerie::balance_value<TEST>(&space) == 195_000_000_000, 3);
-            assert!(suigallerie::gas_value<TEST>(&space) == 99_999_500_000, 4);
+            assert!(suigallerie::gas_value<TEST>(&space) == 99_985_000_000, 4);
+            test_scenario::return_to_sender(scenario, admin_cap);
+            test_scenario::return_shared(space);
+            test_scenario::return_shared(deploy_record);
+        };
+
+        test_scenario::next_tx(scenario, sender);
+        {
+            let mut space = test_scenario::take_shared<suigallerie::Space<TEST>>(scenario);
+            let admin_cap = test_scenario::take_from_sender<suigallerie::AdminCap>(scenario);
+            suigallerie::withdraw_coin_to<TEST>(&admin_cap, &mut space, alice, 195_000_000_000, test_scenario::ctx(scenario));
+            assert!(suigallerie::balance_value<TEST>(&space) == 0, 5);
+            suigallerie::withdraw_gas_to<TEST>(&admin_cap, &mut space, alice, 99_985_000_000, test_scenario::ctx(scenario));
+            assert!(suigallerie::gas_value<TEST>(&space) == 0, 6);
             test_scenario::return_to_sender(scenario, admin_cap);
             test_scenario::return_shared(space);
         };

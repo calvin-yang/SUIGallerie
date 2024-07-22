@@ -126,12 +126,12 @@ module suigallerie::suigallerie {
         });
     }
 
-    public fun withdraw_coin_to<T>(_: &AdminCap, space: &mut Space<T>, value: u64, recipient: address, ctx: &mut TxContext) {
+    public fun withdraw_coin_to<T>(_: &AdminCap, space: &mut Space<T>, recipient: address, value: u64, ctx: &mut TxContext) {
         let return_coin = coin::take<T>(&mut space.balance, value, ctx);
         transfer::public_transfer(return_coin, recipient);
     }
 
-    public fun withdraw_gas_to<T>(_: &AdminCap, space: &mut Space<T>, value: u64, recipient: address, ctx: &mut TxContext) {
+    public fun withdraw_gas_to<T>(_: &AdminCap, space: &mut Space<T>, recipient: address, value: u64, ctx: &mut TxContext) {
         let return_coin = coin::take<SUI>(&mut space.gas, value, ctx);
         transfer::public_transfer(return_coin, recipient);
     }
