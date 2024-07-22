@@ -17,7 +17,7 @@ module suigallerie::suigallerie {
         id: UID,
         version: u64,
         spaces: TableVec<ID>,
-        web2_to_space: Table<String, ID>,
+        space_ids: Table<String, ID>,
         per_gas: u64,
     }
 
@@ -71,7 +71,7 @@ module suigallerie::suigallerie {
             id: object::new(ctx),
             version: VERSION,
             spaces: table_vec::empty<ID>(ctx), 
-            web2_to_space: table::new<String, ID>(ctx),
+            space_ids: table::new<String, ID>(ctx),
             per_gas: PER_GAS, 
         };
         transfer::share_object(deploy_record);
@@ -91,7 +91,7 @@ module suigallerie::suigallerie {
         };
         let space_id = object::id(&space);
         table_vec::push_back<ID>(&mut deploy_record.spaces, space_id);
-        table::add<String, ID>(&mut deploy_record.web2_to_space, web2_space_id, space_id);
+        table::add<String, ID>(&mut deploy_record.space_ids, web2_space_id, space_id);
         emit(DeployEvent {
             deployer: ctx.sender(),
             space: space_id,
