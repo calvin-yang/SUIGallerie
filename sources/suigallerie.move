@@ -145,9 +145,15 @@ module suigallerie::suigallerie {
         object::delete(id);
     }
 
-    public fun withdraw_all_to<T>(_: &AdminCap, space: &mut Space<T>, recipient: address, ctx: &mut TxContext) {
+    public fun withdraw_all_coin_to<T>(_: &AdminCap, space: &mut Space<T>, recipient: address, ctx: &mut TxContext) {
         let total_value = balance::value<T>(&space.balance);
         let return_coin = coin::take<T>(&mut space.balance, total_value, ctx);
+        transfer::public_transfer(return_coin, recipient);
+    }
+
+    public fun withdraw_all_gas_to<T>(_: &AdminCap, space: &mut Space<T>, recipient: address, ctx: &mut TxContext) {
+        let total_value = balance::value<SUI>(&space.gas);
+        let return_coin = coin::take<SUI>(&mut space.gas, total_value, ctx);
         transfer::public_transfer(return_coin, recipient);
     }
 
@@ -171,5 +177,32 @@ module suigallerie::suigallerie {
             space: object::id(space),
             sender: ctx.sender(),
         });
+    }
+
+    // ======== Read Functions =========
+    public fun balance_value<T>(space: &Space<T>): u64 {
+        balance::value<T>(&space.balance)
+    }
+
+    public fun gas_value<T>(space: &Space<T>): u64 {
+        balance::value<SUI>(&space.gas)
+    }
+
+    /*
+    // ======== Upgrade Functions for the future =========
+    public fun upgrade_deploy_record(deploy_record: &mut DeployRecord) {
+        assert!(deploy_record.version < VERSION, EVersionMismatch);
+        deploy_record.version = VERSION;
+    }
+
+    public fun upgrade_space<T>(space: &mut Space<T>) {
+        assert!(space.version < VERSION, EVersionMismatch);
+        space.version = VERSION;
+    }
+    */
+
+    #[test_only]
+    public fun init_for_testing(ctx: &mut TxContext) {
+        init(ctx);
     }
 }
