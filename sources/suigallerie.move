@@ -1,6 +1,6 @@
 module suigallerie::suigallerie {
     use std::type_name;
-    use sui::table_vec::{Self, TableVec};
+    // use sui::table_vec::{Self, TableVec};
     use sui::table::{Self, Table};
     use sui::balance::{Self, Balance};
     use sui::coin::{Self, Coin};
